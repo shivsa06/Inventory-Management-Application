@@ -1,11 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Box, Typography } from "@mui/material";
 import { useParams } from "react-router-dom";
-import {
-  getPurchases,
-  deletePurchaseDetail,
-  updatePurchaseDetail,
-} from "../services/api";
+import axios from "axios";
+import Swal from "sweetalert2";
 import PurchaseItemsTable from "../components/PurchaseItemsTable";
 import "../styles/App.css";
 
@@ -17,16 +14,10 @@ const PurchaseDetails = () => {
   const [editQuantity, setEditQuantity] = useState("");
 
   const fetchPurchase = () => {
-    getPurchases()
+    axios
+      .get("http://localhost:1111/purchases/getPurchase")
       .then((response) => {
-        const purchases = response.data.purchases.map((p) => ({
-          ...p,
-          purchase_date: new Date(
-            new Date(p.purchase_date).getTime() + 24 * 60 * 60 * 1000
-          )
-            .toISOString()
-            .split("T")[0],
-        }));
+        const purchases = response.data.purchases;
         const selectedPurchase = purchases.find(
           (p) => p.purchase_id === parseInt(purchase_id)
         );
@@ -47,7 +38,8 @@ const PurchaseDetails = () => {
   }, [purchase_id]);
 
   const handleDeleteItem = (detail_id) => {
-    deletePurchaseDetail(detail_id)
+    axios
+      .delete(`http://localhost:1111/purchases/details/${detail_id}`)
       .then(() => {
         fetchPurchase();
       })
@@ -56,17 +48,15 @@ const PurchaseDetails = () => {
       });
   };
 
-  const handleEditItem = (detail_id, quantity) => {
-    if (detail_id && typeof quantity !== "undefined") {
-      setEditingDetailId(detail_id);
-      setEditQuantity(String(quantity));
+  const handleEditItem = (item) => {
+    if (item?.detail_id && Number.isFinite(item?.quantity)) {
+      setEditingDetailId(item.detail_id);
+      setEditQuantity(String(item.quantity));
+      setError("");
     } else {
       setError("Invalid item data");
+      console.error("Invalid item:", item);
     }
-  };
-
-  const handleUpdateQuantity = (quantity) => {
-    setEditQuantity(quantity);
   };
 
   const handleSaveEdit = (detail_id) => {
@@ -76,22 +66,55 @@ const PurchaseDetails = () => {
       return;
     }
 
-    updatePurchaseDetail(detail_id, {
-      quantity: parsedQuantity,
-    })
-      .then(() => {
-        setEditingDetailId(null);
-        setEditQuantity("");
-        fetchPurchase();
+    axios
+      .get(`http://localhost:1111/inventory/getInventory`)
+      .then((response) => {
+        const inventory = response.data.inventory;
+        const itemDetail = purchase.items.find(
+          (item) => item.detail_id === detail_id
+        );
+        if (!itemDetail) {
+          setError("Item detail not found");
+          return;
+        }
+        const currentStock =
+          inventory.find((inv) => inv.item_id === itemDetail.item_id)
+            ?.quantity || 0;
+        const oldQuantity = itemDetail.quantity;
+        const quantityChange = parsedQuantity - oldQuantity;
+
+        if (quantityChange > currentStock) {
+          Swal.fire({
+            icon: "error",
+            title: "Insufficient Stock",
+            text: `Requested quantity (${parsedQuantity}) exceeds available stock (${currentStock}).`,
+          });
+          return;
+        }
+
+        axios
+          .put(`http://localhost:1111/purchases/details/${detail_id}`, {
+            quantity: parsedQuantity,
+          })
+          .then(() => {
+            setEditingDetailId(null);
+            setEditQuantity("");
+            setError("");
+            fetchPurchase();
+          })
+          .catch((err) => {
+            setError("Failed to update item: " + err.message);
+          });
       })
       .catch((err) => {
-        setError("Failed to update item: " + err.message);
+        setError("Failed to fetch inventory: " + err.message);
       });
   };
 
   const handleCancelEdit = () => {
     setEditingDetailId(null);
     setEditQuantity("");
+    setError("");
   };
 
   if (error) {
@@ -140,14 +163,14 @@ const PurchaseDetails = () => {
         </Typography>
       </Box>
       <PurchaseItemsTable
-        items={purchase.items}
+        items={purchase.items || []}
         editingDetailId={editingDetailId}
         editQuantity={editQuantity}
         onEdit={handleEditItem}
-        onUpdateQuantity={handleUpdateQuantity}
         onSave={handleSaveEdit}
         onCancel={handleCancelEdit}
         onDelete={handleDeleteItem}
+        setEditQuantity={setEditQuantity}
       />
     </Box>
   );

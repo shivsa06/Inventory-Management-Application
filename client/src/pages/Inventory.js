@@ -122,6 +122,7 @@ const Inventory = () => {
           data={inventory}
           onUpdate={fetchInventory}
           onDelete={fetchInventory}
+          editableColumns={["quantity"]}
         />
       </Box>
     </Box>

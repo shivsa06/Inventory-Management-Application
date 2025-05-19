@@ -13,7 +13,8 @@ import {
   Typography,
 } from "@mui/material";
 import { Add, Remove } from "@mui/icons-material";
-import { createPurchase, getInventory, getItems } from "../services/api";
+import axios from "axios";
+import Swal from "sweetalert2";
 import "../styles/App.css";
 
 const PurchaseForm = ({ onPurchaseAdded }) => {
@@ -26,19 +27,25 @@ const PurchaseForm = ({ onPurchaseAdded }) => {
 
   useEffect(() => {
     setLoading(true);
-    getInventory()
+    axios
+      .get("http://localhost:1111/inventory/getInventory")
       .then((response) => {
         if (response.data.inventory && Array.isArray(response.data.inventory)) {
-          getItems()
+          axios
+            .get("http://localhost:1111/items/getItem")
             .then((itemResponse) => {
-              const validItemIds = itemResponse.data.items.map(
-                (item) => item.item_id
-              );
-              const filteredInventory = response.data.inventory.filter((inv) =>
-                validItemIds.includes(inv.item_id)
-              );
-              setAvailableItems(filteredInventory);
-              if (filteredInventory.length === 0) {
+              const itemsWithDetails = response.data.inventory.map((inv) => {
+                const item = itemResponse.data.items.find(
+                  (i) => i.item_id === inv.item_id
+                );
+                return {
+                  ...inv,
+                  name: item?.name || "Unknown Item",
+                  price: item?.price || 0,
+                };
+              });
+              setAvailableItems(itemsWithDetails);
+              if (itemsWithDetails.length === 0) {
                 setError("No valid items found in inventory");
               }
             })
@@ -68,8 +75,29 @@ const PurchaseForm = ({ onPurchaseAdded }) => {
 
   const updateItem = (index, field, value) => {
     const newItems = [...items];
-    newItems[index][field] =
-      field === "item_id" ? parseInt(value) : parseInt(value) || 1;
+    if (field === "quantity") {
+      const parsedQuantity = parseInt(value) || 1;
+      const itemId = newItems[index].item_id;
+      if (itemId) {
+        const stock =
+          availableItems.find((avail) => avail.item_id === itemId)?.quantity ||
+          0;
+        if (parsedQuantity > stock) {
+          Swal.fire({
+            icon: "error",
+            title: "Insufficient Stock",
+            text: `Cannot select more than ${stock} for ${
+              availableItems.find((avail) => avail.item_id === itemId)?.name ||
+              "this item"
+            }.`,
+          });
+          return;
+        }
+      }
+      newItems[index][field] = parsedQuantity;
+    } else {
+      newItems[index][field] = parseInt(value) || "";
+    }
     setItems(newItems);
   };
 
@@ -83,11 +111,31 @@ const PurchaseForm = ({ onPurchaseAdded }) => {
       setError("All fields are required and quantities must be positive");
       return;
     }
-    createPurchase({
-      customer_name: customerName,
-      purchase_date: purchaseDate,
-      items,
-    })
+
+    // Validate stock for all items before submitting
+    for (const item of items) {
+      const stock =
+        availableItems.find((avail) => avail.item_id === item.item_id)
+          ?.quantity || 0;
+      if (item.quantity > stock) {
+        Swal.fire({
+          icon: "error",
+          title: "Insufficient Stock",
+          text: `Cannot select more than ${stock} for ${
+            availableItems.find((avail) => avail.item_id === item.item_id)
+              ?.name || "this item"
+          }.`,
+        });
+        return;
+      }
+    }
+
+    axios
+      .post("http://localhost:1111/purchases/createPurchase", {
+        customer_name: customerName,
+        purchase_date: purchaseDate,
+        items,
+      })
       .then((response) => {
         setCustomerName("");
         setPurchaseDate("");
@@ -117,6 +165,7 @@ const PurchaseForm = ({ onPurchaseAdded }) => {
           fullWidth
           margin="normal"
           required
+          sx={{ backgroundColor: "#fff", borderRadius: "8px" }}
         />
         <TextField
           label="Purchase Date"
@@ -127,6 +176,7 @@ const PurchaseForm = ({ onPurchaseAdded }) => {
           margin="normal"
           InputLabelProps={{ shrink: true }}
           required
+          sx={{ backgroundColor: "#fff", borderRadius: "8px" }}
         />
         <Table sx={{ mt: 2, mb: 3 }}>
           <TableHead>
@@ -139,7 +189,7 @@ const PurchaseForm = ({ onPurchaseAdded }) => {
           <TableBody>
             {items.map((item, index) => (
               <TableRow key={`item-row-${index}`}>
-                <TableCell>
+                <TableCell sx={{ minWidth: "300px" }}>
                   <TextField
                     select
                     value={item.item_id || ""}
@@ -148,6 +198,9 @@ const PurchaseForm = ({ onPurchaseAdded }) => {
                     }
                     fullWidth
                     disabled={loading || availableItems.length === 0}
+                    SelectProps={{ displayEmpty: true }}
+                    label="Item"
+                    sx={{ backgroundColor: "#fff", borderRadius: "8px" }}
                   >
                     {availableItems.length === 0 ? (
                       <MenuItem value="" disabled>
@@ -159,8 +212,7 @@ const PurchaseForm = ({ onPurchaseAdded }) => {
                           key={`avail-item-${avail.item_id}-${idx}`}
                           value={avail.item_id}
                         >
-                          {avail.name} (Stock: {avail.quantity}, Price: ₹
-                          {avail.price})
+                          {avail.name}
                         </MenuItem>
                       ))
                     )}
@@ -175,6 +227,11 @@ const PurchaseForm = ({ onPurchaseAdded }) => {
                     }
                     fullWidth
                     inputProps={{ min: 1 }}
+                    sx={{
+                      maxWidth: "150px",
+                      backgroundColor: "#fff",
+                      borderRadius: "8px",
+                    }}
                   />
                 </TableCell>
                 <TableCell>
@@ -195,7 +252,7 @@ const PurchaseForm = ({ onPurchaseAdded }) => {
             startIcon={<Add />}
             variant="outlined"
             color="primary"
-            sx={{ flex: 1 }}
+            sx={{ flex: 1, borderRadius: "8px" }}
           >
             Add Item
           </Button>
@@ -203,7 +260,7 @@ const PurchaseForm = ({ onPurchaseAdded }) => {
             type="submit"
             variant="contained"
             color="primary"
-            sx={{ flex: 1 }}
+            sx={{ flex: 1, borderRadius: "8px" }}
           >
             Add Purchase
           </Button>

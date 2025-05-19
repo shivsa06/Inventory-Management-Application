@@ -20,14 +20,14 @@ import {
 import "../styles/Table.css";
 
 const PurchaseItemsTable = ({
-  items,
+  items = [],
   editingDetailId,
   editQuantity,
   onEdit,
-  onUpdateQuantity,
   onSave,
   onCancel,
   onDelete,
+  setEditQuantity,
 }) => {
   return (
     <Paper elevation={2} sx={{ borderRadius: 2, overflow: "hidden" }}>
@@ -67,62 +67,81 @@ const PurchaseItemsTable = ({
           </TableRow>
         </TableHead>
         <TableBody>
-          {items.map((item, index) => (
-            <TableRow
-              key={`item-${item.detail_id}-${index}`}
-              sx={{
-                "&:nth-of-type(even)": { backgroundColor: "#fafbfc" },
-                "&:hover": { backgroundColor: "#f1f3f5" },
-              }}
-            >
-              <TableCell sx={{ textAlign: "left" }}>{item.item_name}</TableCell>
-              <TableCell sx={{ textAlign: "left" }}>
-                {editingDetailId === item.detail_id ? (
-                  <TextField
-                    type="number"
-                    value={editQuantity}
-                    onChange={(e) => onUpdateQuantity(e.target.value)}
-                    size="small"
-                    sx={{ width: "100px" }}
-                  />
-                ) : (
-                  item.quantity
-                )}
-              </TableCell>
-              <TableCell sx={{ textAlign: "left" }}>₹{item.subtotal}</TableCell>
-              <TableCell sx={{ textAlign: "left" }}>₹{item.price}</TableCell>
-              <TableCell sx={{ textAlign: "center" }}>
-                <Box sx={{ display: "flex", justifyContent: "center", gap: 1 }}>
+          {items.length > 0 ? (
+            items.map((item, index) => (
+              <TableRow
+                key={`item-${item.detail_id}-${index}`}
+                sx={{
+                  "&:nth-of-type(even)": { backgroundColor: "#fafbfc" },
+                  "&:hover": { backgroundColor: "#f1f3f5" },
+                }}
+              >
+                <TableCell sx={{ textAlign: "left" }}>
+                  {item.item_name || "-"}
+                </TableCell>
+                <TableCell sx={{ textAlign: "left" }}>
                   {editingDetailId === item.detail_id ? (
-                    <>
+                    <TextField
+                      type="number"
+                      value={editQuantity}
+                      onChange={(e) => setEditQuantity(e.target.value)}
+                      size="small"
+                      sx={{ width: "100px" }}
+                    />
+                  ) : (
+                    item.quantity || "-"
+                  )}
+                </TableCell>
+                <TableCell sx={{ textAlign: "left" }}>
+                  ₹{item.subtotal || "-"}
+                </TableCell>
+                <TableCell sx={{ textAlign: "left" }}>
+                  ₹{item.price || "-"}
+                </TableCell>
+                <TableCell sx={{ textAlign: "center" }}>
+                  <Box
+                    sx={{ display: "flex", justifyContent: "center", gap: 1 }}
+                  >
+                    {editingDetailId === item.detail_id ? (
+                      <>
+                        <IconButton
+                          onClick={() => onSave(item.detail_id)}
+                          sx={{ color: "#1976d2" }}
+                        >
+                          <SaveIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          onClick={onCancel}
+                          sx={{ color: "#d32f2f" }}
+                        >
+                          <CancelIcon fontSize="small" />
+                        </IconButton>
+                      </>
+                    ) : (
                       <IconButton
-                        onClick={() => onSave(item.detail_id)}
+                        onClick={() => onEdit(item)}
                         sx={{ color: "#1976d2" }}
                       >
-                        <SaveIcon fontSize="small" />
+                        <EditIcon fontSize="small" />
                       </IconButton>
-                      <IconButton onClick={onCancel} sx={{ color: "#d32f2f" }}>
-                        <CancelIcon fontSize="small" />
-                      </IconButton>
-                    </>
-                  ) : (
+                    )}
                     <IconButton
-                      onClick={() => onEdit(item.detail_id, item.quantity)}
-                      sx={{ color: "#1976d2" }}
+                      onClick={() => onDelete(item.detail_id)}
+                      sx={{ color: "#d32f2f" }}
                     >
-                      <EditIcon fontSize="small" />
+                      <DeleteIcon fontSize="small" />
                     </IconButton>
-                  )}
-                  <IconButton
-                    onClick={() => onDelete(item.detail_id)}
-                    sx={{ color: "#d32f2f" }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Box>
+                  </Box>
+                </TableCell>
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell colSpan={5} sx={{ textAlign: "center" }}>
+                No items found
               </TableCell>
             </TableRow>
-          ))}
+          )}
         </TableBody>
       </Table>
     </Paper>

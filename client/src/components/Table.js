@@ -9,25 +9,23 @@ import {
   Box,
   Paper,
   TextField,
+  MenuItem,
 } from "@mui/material";
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Info as InfoIcon,
+  Save as SaveIcon,
+  Cancel as CancelIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
-import {
-  updateItem,
-  deleteItem,
-  updateInventory,
-  deleteInventory,
-  deletePurchase,
-} from "../services/api";
+import axios from "axios";
 import "../styles/Table.css";
 
-const DataTable = ({ data, onUpdate, onDelete }) => {
+const DataTable = ({ data, onUpdate, onDelete, editableColumns = [] }) => {
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
+  const [itemTypes, setItemTypes] = useState([]);
   const navigate = useNavigate();
 
   const isInventoryTable = data.some((item) => item.inventory_id);
@@ -38,77 +36,110 @@ const DataTable = ({ data, onUpdate, onDelete }) => {
     ? "inventory"
     : "item";
 
+  React.useEffect(() => {
+    if (tableType === "item") {
+      axios
+        .get("http://localhost:1111/items/getItemTypes")
+        .then((response) => {
+          setItemTypes(response.data.itemTypes || []);
+        })
+        .catch((err) => {
+          console.error("Failed to fetch item types:", err);
+        });
+    }
+  }, [tableType]);
+
   const columnsConfig = {
     item: [
       { key: "name", label: "Name", editable: true },
       { key: "price", label: "Price", editable: true, type: "number" },
-      { key: "type_name", label: "Type Name", editable: true },
+      {
+        key: "type_id",
+        label: "Type Name",
+        editable: true,
+        type: "select",
+        options: itemTypes,
+        displayKey: "type_name",
+      },
     ],
     inventory: [
-      { key: "name", label: "Name", editable: true },
-      { key: "price", label: "Price", editable: true, type: "number" },
-      { key: "type_name", label: "Type Name", editable: true },
+      { key: "name", label: "Name", editable: false },
+      { key: "price", label: "Price", editable: false, type: "number" },
+      { key: "type_name", label: "Type Name", editable: false },
       { key: "quantity", label: "Quantity", editable: true, type: "number" },
     ],
     purchase: [
-      { key: "customer_name", label: "Customer Name", editable: false },
-      { key: "purchase_date", label: "Purchase Date", editable: false },
+      { key: "customer_name", label: "Customer Name", editable: true },
+      {
+        key: "purchase_date",
+        label: "Purchase Date",
+        editable: true,
+        type: "date",
+      },
       { key: "total_amount", label: "Total Amount", editable: false },
     ],
   };
 
   const typeConfig = {
     item: {
-      endpoint: (id) =>
-        updateItem(id, {
-          name: editData.name,
-          price: parseFloat(editData.price) || 0,
-          type_id: editData.type_id,
-        }),
-      deleteEndpoint: (id) => deleteItem(id),
+      endpoint: (id) => `http://localhost:1111/items/${id}`,
+      payload: (data) => ({
+        name: data.name,
+        price: parseFloat(data.price) || 0,
+        type_id: parseInt(data.type_id) || data.type_id,
+      }),
       idKey: "item_id",
     },
     inventory: {
-      endpoint: (id) =>
-        updateInventory(id, {
-          quantity: parseInt(editData.quantity) || 0,
-          item_id: editData.item_id,
-        }),
-      deleteEndpoint: (id) => deleteInventory(id),
+      endpoint: (id) => `http://localhost:1111/inventory/${id}`,
+      payload: (data) => ({
+        quantity: parseInt(data.quantity) || 0,
+        item_id: data.item_id,
+      }),
       idKey: "inventory_id",
     },
     purchase: {
-      deleteEndpoint: (id) => deletePurchase(id),
+      endpoint: (id) => `http://localhost:1111/purchases/${id}`,
+      payload: (data) => ({
+        customer_name: data.customer_name,
+        purchase_date: data.purchase_date,
+        items: data.items.map((item) => ({
+          item_id: item.item_id,
+          quantity: item.quantity,
+        })),
+      }),
       idKey: "purchase_id",
     },
   };
 
   const handleEdit = (item) => {
-    if (tableType !== "purchase") {
-      setEditId(item[typeConfig[tableType].idKey]);
-      setEditData(item);
-    }
+    setEditId(item[typeConfig[tableType].idKey]);
+    setEditData(item);
   };
 
   const handleSave = (id) => {
-    if (tableType !== "purchase") {
-      const config = typeConfig[tableType];
-      config
-        .endpoint(id)
-        .then(() => {
-          setEditId(null);
-          if (onUpdate) onUpdate();
-        })
-        .catch((err) => {
-          console.error("Failed to update:", err);
-        });
-    }
+    const config = typeConfig[tableType];
+    axios
+      .put(config.endpoint(id), config.payload(editData))
+      .then(() => {
+        setEditId(null);
+        setEditData({});
+        if (onUpdate) onUpdate();
+      })
+      .catch((err) => {
+        console.error("Failed to update:", err);
+      });
+  };
+
+  const handleCancel = () => {
+    setEditId(null);
+    setEditData({});
   };
 
   const handleDelete = (id) => {
     const config = typeConfig[tableType];
-    config
-      .deleteEndpoint(id)
+    axios
+      .delete(config.endpoint(id))
       .then(() => {
         if (onDelete) onDelete();
       })
@@ -119,10 +150,29 @@ const DataTable = ({ data, onUpdate, onDelete }) => {
 
   const renderCell = (item, column) => {
     if (
-      tableType !== "purchase" &&
       editId === item[typeConfig[tableType].idKey] &&
-      column.editable
+      column.editable &&
+      (!editableColumns.length || editableColumns.includes(column.key))
     ) {
+      if (column.type === "select") {
+        return (
+          <TextField
+            select
+            value={editData[column.key] || ""}
+            onChange={(e) =>
+              setEditData({ ...editData, [column.key]: e.target.value })
+            }
+            size="small"
+            sx={{ width: "100%" }}
+          >
+            {column.options.map((option) => (
+              <MenuItem key={option.type_id} value={option.type_id}>
+                {option[column.displayKey]}
+              </MenuItem>
+            ))}
+          </TextField>
+        );
+      }
       return (
         <TextField
           type={column.type || "text"}
@@ -143,6 +193,8 @@ const DataTable = ({ data, onUpdate, onDelete }) => {
     }
     return column.key === "total_amount"
       ? `₹${item[column.key] || "-"}`
+      : column.key === "type_id"
+      ? item.type_name || "-"
       : item[column.key] || "-";
   };
 
@@ -185,25 +237,30 @@ const DataTable = ({ data, onUpdate, onDelete }) => {
                   <Box
                     sx={{ display: "flex", justifyContent: "center", gap: 1 }}
                   >
-                    {tableType !== "purchase" &&
-                    editId === item[typeConfig[tableType].idKey] ? (
+                    {editId === item[typeConfig[tableType].idKey] ? (
+                      <>
+                        <IconButton
+                          onClick={() =>
+                            handleSave(item[typeConfig[tableType].idKey])
+                          }
+                          sx={{ color: "#1976d2" }}
+                        >
+                          <SaveIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          onClick={handleCancel}
+                          sx={{ color: "#d32f2f" }}
+                        >
+                          <CancelIcon fontSize="small" />
+                        </IconButton>
+                      </>
+                    ) : (
                       <IconButton
-                        onClick={() =>
-                          handleSave(item[typeConfig[tableType].idKey])
-                        }
+                        onClick={() => handleEdit(item)}
                         sx={{ color: "#1976d2" }}
                       >
                         <EditIcon fontSize="small" />
                       </IconButton>
-                    ) : (
-                      tableType !== "purchase" && (
-                        <IconButton
-                          onClick={() => handleEdit(item)}
-                          sx={{ color: "#1976d2" }}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                      )
                     )}
                     <IconButton
                       onClick={() =>
