@@ -20,7 +20,7 @@ const Home = () => {
         className="header"
         sx={{ fontWeight: 700, color: "#2c3e50" }}
       >
-        Welcome to Store App
+        Welcome to Inventory Management App
       </Typography>
       <Typography
         variant="body1"

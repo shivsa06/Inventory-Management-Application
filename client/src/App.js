@@ -19,7 +19,7 @@ const App = () => {
             to="/"
             style={{ textDecoration: "none", color: "white" }}
           >
-            Store App
+            Inventory Management
           </Typography>
           <Box sx={{ display: "flex", gap: 3, alignItems: "center" }}>
             <Link
