@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { TextField, Button, MenuItem, Box, Typography } from "@mui/material";
-import { createItem, getItemTypes } from '../services/api';
+import { createItem, getItemTypes, getItems } from "../services/api";
+import Swal from "sweetalert2";
 import "../styles/App.css";
 
 const ItemForm = ({ onItemAdded }) => {
@@ -45,20 +46,46 @@ const ItemForm = ({ onItemAdded }) => {
       setError("Price must be a positive number");
       return;
     }
-    createItem({
-      name,
-      price: parseFloat(price),
-      type_id: parseInt(typeId),
-    })
+
+    // Check if item with the same name already exists
+    getItems()
       .then((response) => {
-        setName("");
-        setPrice("");
-        setTypeId(itemTypes.length > 0 ? itemTypes[0].type_id : "");
-        setError("");
-        if (onItemAdded) onItemAdded();
+        const items = response.data.items || [];
+        const itemExists = items.some(
+          (item) => item.name.toLowerCase() === name.trim().toLowerCase()
+        );
+        if (itemExists) {
+          Swal.fire({
+            icon: "error",
+            title: "Duplicate Item",
+            text: `Item with "${name}" already exists`,
+          });
+          return;
+        }
+
+        createItem({
+          name,
+          price: parseFloat(price),
+          type_id: parseInt(typeId),
+        })
+          .then((response) => {
+            setName("");
+            setPrice("");
+            setTypeId(itemTypes.length > 0 ? itemTypes[0].type_id : "");
+            setError("");
+            Swal.fire({
+              icon: "success",
+              title: "Success",
+              text: "Item added successfully",
+            });
+            if (onItemAdded) onItemAdded();
+          })
+          .catch((err) => {
+            setError(err.response?.data?.error || "Failed to add item");
+          });
       })
       .catch((err) => {
-        setError(err.response?.data?.error || "Failed to add item");
+        setError("Failed to check existing items: " + err.message);
       });
   };
 

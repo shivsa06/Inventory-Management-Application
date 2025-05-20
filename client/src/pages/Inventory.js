@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Box, TextField, Button, MenuItem, Typography } from "@mui/material";
 import axios from "axios";
+import Swal from "sweetalert2";
 import DataTable from "../components/Table";
 import "../styles/App.css";
 
@@ -44,19 +45,50 @@ const Inventory = () => {
       setError("Item and quantity are required");
       return;
     }
+    if (isNaN(quantity) || parseInt(quantity) < 0) {
+      setError("Quantity must be a non-negative number");
+      return;
+    }
+
+    // Check if item already exists in inventory
     axios
-      .post("http://localhost:1111/inventory/createInventory", {
-        item_id: parseInt(itemId),
-        quantity: parseInt(quantity),
-      })
-      .then(() => {
-        setItemId("");
-        setQuantity("");
-        setError("");
-        fetchInventory();
+      .get("http://localhost:1111/inventory/getInventory")
+      .then((response) => {
+        const inventory = response.data.inventory || [];
+        const itemExists = inventory.some(
+          (inv) => inv.item_id === parseInt(itemId)
+        );
+        if (itemExists) {
+          Swal.fire({
+            icon: "error",
+            title: "Duplicate Item",
+            text: "Item already exists in inventory",
+          });
+          return;
+        }
+
+        axios
+          .post("http://localhost:1111/inventory/createInventory", {
+            item_id: parseInt(itemId),
+            quantity: parseInt(quantity),
+          })
+          .then(() => {
+            setItemId("");
+            setQuantity("");
+            setError("");
+            Swal.fire({
+              icon: "success",
+              title: "Success",
+              text: "Inventory added successfully",
+            });
+            fetchInventory();
+          })
+          .catch((err) => {
+            setError(err.response?.data?.error || "Failed to add inventory");
+          });
       })
       .catch((err) => {
-        setError(err.response?.data?.error || "Failed to add inventory");
+        setError("Failed to check inventory: " + err.message);
       });
   };
 

@@ -141,6 +141,11 @@ const PurchaseForm = ({ onPurchaseAdded }) => {
         setPurchaseDate("");
         setItems([{ item_id: "", quantity: 1 }]);
         setError("");
+        Swal.fire({
+          icon: "success",
+          title: "Success",
+          text: "Purchase added successfully",
+        });
         if (onPurchaseAdded) onPurchaseAdded();
       })
       .catch((err) => {
